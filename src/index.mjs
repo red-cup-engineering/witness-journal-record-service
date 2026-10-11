@@ -18,12 +18,13 @@
 // as a hallucinated pipeline framing; it did not abolish settled records as
 // a concept. A settled record is still an append-only log — of Datoms
 // instead of entries — so it is filed as a sibling of the live log under the
-// SAME dated custody root, `<root>/data/logs/YYYY/MM/DD/<feed>.record.jsonl`,
-// rather than inventing a fourth top-level tier the ruling never sanctioned.
+// counterpart in the record tier, `<root>/data/records/<feed>-records/<date>-commit-<feed>.jsonl`,
+// addressed by the eavt-services-section tier law.
 
 import { mkdirSync, appendFileSync, readFileSync } from "node:fs";
 import path from "node:path";
 
+import { projectDataArtifactPath } from "@red-cup-engineering/eavt-services-section/data-artifact-address";
 import { serializeDatoms } from "@red-cup-engineering/json-file-codec-service/jsonl/eavt";
 import { asEntry } from "@red-cup-engineering/witness-journal-entry-service";
 import { logPathFor, writeEntriesAtomicAtPath } from "@red-cup-engineering/witness-journal-log-service";
@@ -74,8 +75,8 @@ export function settle(rows, judge) {
 }
 
 /**
- * The dated settled-record path for one feed, a sibling of that feed's live
- * journal file under the same day directory.
+ * The dated settled-record path for one feed: the record-tier counterpart of that
+ * feed's live journal file.
  *
  * @param {string} root
  * @param {string} feed
@@ -83,8 +84,7 @@ export function settle(rows, judge) {
  * @returns {string}
  */
 export function recordPathFor(root, feed, at) {
-  const logPath = logPathFor(root, feed, at);
-  return logPath.replace(/\.jsonl$/, ".record.jsonl");
+  return projectDataArtifactPath(logPathFor(root, feed, at), "record", "jsonl");
 }
 
 /**
