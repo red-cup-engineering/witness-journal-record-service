@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@red-cup-engineering/json-file-codec-service": "0.1.2",
-    "@red-cup-engineering/witness-journal-entry-service": "0.1.1",
-    "@red-cup-engineering/witness-journal-log-service": "0.1.1"
+    "@red-cup-engineering/witness-journal-entry-service": "workspace:*",
+    "@red-cup-engineering/witness-journal-log-service": "workspace:*"
   }
 }
