@@ -14,7 +14,7 @@
     "verify": "npm run check && npm test"
   },
   "dependencies": {
-    "@red-cup-engineering/json-file-codec-service": "0.1.2",
+    "@red-cup-engineering/json-file-codec-service": "workspace:*",
     "@red-cup-engineering/witness-journal-entry-service": "workspace:*",
     "@red-cup-engineering/witness-journal-log-service": "workspace:*"
   }
