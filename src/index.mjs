@@ -21,13 +21,13 @@
 // counterpart in the record tier, `<root>/data/records/<feed>-records/<date>-commit-<feed>.jsonl`,
 // addressed by the eavt-services-section tier law.
 
-import { mkdirSync, appendFileSync, readFileSync } from "node:fs";
+import { mkdirSync, appendFileSync } from "node:fs";
 import path from "node:path";
 
 import { projectDataArtifactPath } from "@red-cup-engineering/eavt-services-section/data-artifact-address";
 import { serializeDatoms } from "@red-cup-engineering/json-file-codec-service/jsonl/eavt";
 import { asEntry } from "@red-cup-engineering/witness-journal-entry-service";
-import { logPathFor, writeEntriesAtomicAtPath } from "@red-cup-engineering/witness-journal-log-service";
+import { logPathFor, readJsonLinesAtPath, writeEntriesAtomicAtPath } from "@red-cup-engineering/witness-journal-log-service";
 
 /**
  * @typedef {import("@red-cup-engineering/json-file-codec-service").JsonValue} JsonValue
@@ -88,33 +88,16 @@ export function recordPathFor(root, feed, at) {
 }
 
 /**
- * Read a feed's settled Datoms back at an exact path. A missing or
- * unreadable file reads as no settled records yet; malformed lines are
- * skipped.
- *
- * @param {string} filePath
- * @returns {Datom[]}
+ * Read the original five-slot Datoms through the one upstream JSONL reader.
+ * ENOENT is empty, but malformed/unreadable input or an invalid record
+ * MUST refuse. Skipping evidence would fabricate a settled ledger projection.
  */
 export function readDatomsAtPath(filePath) {
-  let content;
-  try {
-    content = readFileSync(filePath, "utf8");
-  } catch {
-    return [];
-  }
-  /** @type {Datom[]} */
-  const out = [];
-  for (const line of content.split("\n")) {
-    const trimmed = line.trim();
-    if (trimmed.length === 0) continue;
-    try {
-      const value = JSON.parse(trimmed);
-      if (Array.isArray(value) && value.length === 5) out.push(/** @type {Datom} */ (value));
-    } catch {
-      // A malformed line is absent from this reading.
-    }
-  }
-  return out;
+  return readJsonLinesAtPath(filePath).map((value, index) => {
+    if (!Array.isArray(value) || value.length !== 5)
+      throw new TypeError(`witness-journal: malformed five-slot Datom at ${filePath}:${index + 1}`);
+    return /** @type {Datom} */ (value);
+  });
 }
 
 /**
