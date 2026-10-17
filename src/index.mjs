@@ -26,7 +26,7 @@ import { projectDataArtifactPath } from "@red-cup-engineering/eavt-services-sect
 import { serializeDatoms } from "@red-cup-engineering/json-file-codec-service/jsonl/eavt";
 import { asEntry } from "@red-cup-engineering/witness-journal-entry-service";
 import { canonical } from "@red-cup-engineering/json-file-codec-service";
-import { logPathFor, readJsonLinesAtPath, writeEntriesAtomicAtPath } from "@red-cup-engineering/witness-journal-log-service";
+import { logPathFor, readEntriesAtPath, readJsonLinesAtPath } from "@red-cup-engineering/witness-journal-log-service";
 
 /**
  * @typedef {import("@red-cup-engineering/json-file-codec-service").JsonValue} JsonValue
