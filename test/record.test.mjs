@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, writeFileSync, readFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -105,5 +105,23 @@ test("commitSettledRecord is a no-op when there is nothing to settle", () => {
 test("readDatomsAtPath reads back a missing file as no settled records", () => {
   withTempRoot((root) => {
     assert.deepEqual(readDatomsAtPath(path.join(root, "nope.record.jsonl")), []);
+  });
+});
+
+test("corrupt settled records refuse rather than disappear from the settlement ledger", () => {
+  withTempRoot((root) => {
+    const filePath = path.join(root, "source.record.jsonl");
+    const first = '["s","p",1,"2026-07-31T00:00:00Z","held"]';
+    writeFileSync(filePath, first + "\n" + '["wrong","shape"]' + "\n");
+    assert.throws(() => readDatomsAtPath(filePath), error =>
+      error instanceof TypeError && error.message.includes(filePath + ":2"));
+    assert.equal(readFileSync(filePath, "utf8"), first + "\n" + '["wrong","shape"]' + "\n");
+    writeFileSync(filePath, first + "\n" + '{"truncated":' + "\n");
+    assert.throws(() => readDatomsAtPath(filePath), error =>
+      error instanceof SyntaxError && error.message.includes(filePath + ":2"));
+    const directory = path.join(root, "unreadable-record");
+    mkdirSync(directory);
+    assert.throws(() => readDatomsAtPath(directory), error => error?.code === "EISDIR");
+    assert.deepEqual(readDatomsAtPath(path.join(root, "missing.jsonl")), []);
   });
 });
