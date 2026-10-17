@@ -57,7 +57,7 @@ test("recordPathFor is the record-tier counterpart of the live journal file", ()
   });
 });
 
-test("commitSettledRecord appends Datoms to the record file and compacts the live log to kept", () => {
+test("settlement appends judgments without deleting any original ledger witnesses", () => {
   withTempRoot((root) => {
     const feed = "feed-b";
     const rows = [
@@ -66,39 +66,40 @@ test("commitSettledRecord appends Datoms to the record file and compacts the liv
       entry("s3", "urn:rmn:observed", "c", AT),
     ];
     appendEntries(root, feed, rows, AT);
+    const originalPath = logPathFor(root, feed, AT);
+    const originalBytes = readFileSync(originalPath, "utf8");
+    const judgement = row => row.e === "s2" ? undefined : { verdict: "held" };
 
-    const { datoms, kept } = settle(rows, (row) => (row.e === "s2" ? undefined : { verdict: "settled" }));
-    const result = commitSettledRecord(root, feed, { datoms, kept, at: AT });
-    assert.ok(result);
+    const result = commitSettledRecord(root, feed, { at: AT, judge: judgement });
+    assert.equal(result.appended, 2);
+    assert.deepEqual(readDatomsAtPath(recordPathFor(root, feed, AT)).map(d => d[0]), ["s1", "s3"]);
+    assert.deepEqual(readEntriesAtPath(originalPath), rows);
+    assert.equal(readFileSync(originalPath, "utf8"), originalBytes,
+      "knowledge never shrinks because an assessor made a judgment");
 
-    const settledBack = readDatomsAtPath(recordPathFor(root, feed, AT));
-    assert.equal(settledBack.length, 2);
-    assert.deepEqual(
-      settledBack.map((d) => d[0]).sort(),
-      ["s1", "s3"],
-    );
-    for (const datom of settledBack) assert.equal(datom.length, 5);
-
-    // The live log is atomically rewritten to only the kept (still-live) entry.
-    const liveLog = readEntriesAtPath(logPathFor(root, feed, AT));
-    assert.equal(liveLog.length, 1);
-    assert.equal(liveLog[0].e, "s2");
+    const replay = commitSettledRecord(root, feed, { at: AT, judge: judgement });
+    assert.equal(replay.appended, 0, "the same reading adds no second Datom");
+    const opposed = commitSettledRecord(root, feed, {
+      at: AT, judge: row => row.e === "s1" ? { verdict: "denied" } : undefined,
+    });
+    assert.equal(opposed.appended, 1, "opposed judgments are retained instead of replacing support");
+    assert.deepEqual(readDatomsAtPath(recordPathFor(root, feed, AT))
+      .filter(d => d[0] === "s1").map(d => d[4].verdict), ["held", "denied"]);
+    assert.equal(readFileSync(originalPath, "utf8"), originalBytes);
   });
 });
 
-test("commitSettledRecord is a no-op when there is nothing to settle", () => {
-  withTempRoot((root) => {
-    const feed = "feed-c";
-    const rows = [entry("s1", "p", "v", AT)];
+test("source-derived settlement refuses invented Datoms and is a no-op without judgments", () => {
+  withTempRoot(root => {
+    const feed = "feed-c", rows = [entry("s1", "p", "v", AT)];
     appendEntries(root, feed, rows, AT);
-
-    const { datoms, kept } = settle(rows, () => undefined);
-    const result = commitSettledRecord(root, feed, { datoms, kept, at: AT });
-    assert.equal(result, undefined);
-
-    assert.equal(existsSync(recordPathFor(root, feed, AT)), false, "no record file materializes for an empty commit");
-    const liveLog = readEntriesAtPath(logPathFor(root, feed, AT));
-    assert.equal(liveLog.length, 1, "the live log is untouched");
+    const before = readFileSync(logPathFor(root, feed, AT), "utf8");
+    assert.throws(() => commitSettledRecord(root, feed, {
+      datoms: [["fabricated", "p", "v", AT, "held"]], kept: [], at: AT,
+    }), /judgment function/);
+    assert.equal(commitSettledRecord(root, feed, { at: AT, judge: () => undefined }), undefined);
+    assert.equal(existsSync(recordPathFor(root, feed, AT)), false);
+    assert.equal(readFileSync(logPathFor(root, feed, AT), "utf8"), before);
   });
 });
 
