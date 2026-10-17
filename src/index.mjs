@@ -7,12 +7,10 @@
 // behind in `relating`'s coherence kernel (see the extraction report for
 // what stayed behind and why).
 //
-// Settling is a caller judgment, not something this module decides on its
-// own: you supply a `judge` function that looks at one entry and either
-// returns the reading you are settling it with, or returns `undefined` to
-// say "still live." This module only records that judgment: it appends the
-// resulting Datoms to the record file and atomically rewrites the journal's
-// live log to hold only the entries that stayed unsettled.
+// Settling is a caller judgment, not a theorem or an erasure operation.
+// Read actual original evidence from the append-only log. Retain all inputs
+// and append every distinct judgment as a separate Datom; never compact
+// away contrary or superseded witnesses.
 //
 // Ruling 4 dissolved the notes' separate log/state/record/content path law
 // as a hallucinated pipeline framing; it did not abolish settled records as
@@ -27,6 +25,7 @@ import path from "node:path";
 import { projectDataArtifactPath } from "@red-cup-engineering/eavt-services-section/data-artifact-address";
 import { serializeDatoms } from "@red-cup-engineering/json-file-codec-service/jsonl/eavt";
 import { asEntry } from "@red-cup-engineering/witness-journal-entry-service";
+import { canonical } from "@red-cup-engineering/json-file-codec-service";
 import { logPathFor, readJsonLinesAtPath, writeEntriesAtomicAtPath } from "@red-cup-engineering/witness-journal-log-service";
 
 /**
@@ -101,22 +100,37 @@ export function readDatomsAtPath(filePath) {
 }
 
 /**
- * Commit a settlement: append `datoms` to the record file, then atomically
- * rewrite the live journal to hold only `kept`. Empty Datom commits are
- * no-ops — settling nothing changes nothing, not even directory creation.
+ * Receive a settlement over the actual original log, never over caller-
+ * supplied Datoms. The judgment comes from an explicit authorized caller;
+ * this code neither infers truth nor invents a witness.
  *
- * @param {string} root
- * @param {string} feed
- * @param {{ readonly datoms: readonly Datom[], readonly kept: readonly unknown[], readonly at: JsonValue }} settlement
- * @returns {{ readonly recordPath: string, readonly logPath: string } | undefined}
+ * A settlement is an ADDITIONAL, append-only reading. Every original
+ * witnessed EAVT row survives for alternative or opposing later judgments.
+ * Replaying an unchanged judgment records no duplicate; a different reading
+ * remains independently visible instead of overwriting the earlier one.
+ *
+ * Requires a single-writer journal root. Cross-process transaction admission
+ * belongs to the owner of the filesystem journal, not a hidden retry here.
  */
-export function commitSettledRecord(root, feed, settlement) {
-  const { datoms, kept, at } = settlement;
+export function commitSettledRecord(root, feed, { at, judge } = {}) {
+  if (typeof judge !== "function")
+    throw new TypeError("settlement requires a source-reading judgment function");
+  const logPath = logPathFor(root, feed, at);
+  const originals = readEntriesAtPath(logPath);
+  const { datoms } = settle(originals, judge);
   if (datoms.length === 0) return undefined;
   const recordPath = recordPathFor(root, feed, at);
-  mkdirSync(path.dirname(recordPath), { recursive: true });
-  appendFileSync(recordPath, serializeDatoms(/** @type {any} */ (datoms)), "utf8");
-  const logPath = logPathFor(root, feed, at);
-  writeEntriesAtomicAtPath(logPath, kept.map((row) => asEntry(row)));
-  return { recordPath, logPath };
+  const known = new Set(readDatomsAtPath(recordPath).map(canonical));
+  const fresh = [];
+  for (const datom of datoms) {
+    const id = canonical(datom);
+    if (known.has(id)) continue;
+    known.add(id);
+    fresh.push(datom);
+  }
+  if (fresh.length > 0) {
+    mkdirSync(path.dirname(recordPath), { recursive: true });
+    appendFileSync(recordPath, serializeDatoms(fresh), "utf8");
+  }
+  return Object.freeze({ recordPath, logPath, appended: fresh.length });
 }
