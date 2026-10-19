@@ -6,8 +6,7 @@
   "description": "Settles entries into records: a Datom is one entry plus the fifth-slot reading a caller judged about that cell, [e, a, v, t, reading]. Commits settled Datoms alongside a journal's live log and atomically compacts that log to only the entries still unsettled.",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/red-cup-engineering/semiotic-computer-system-services-section.git",
-    "directory": "services/witness-journal-services-section/services/witness-journal-record-service"
+    "url": "git+https://github.com/red-cup-engineering/witness-journal-record-service.git"
   },
   "exports": "./src/index.mjs",
   "engines": {
